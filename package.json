@@ -1,0 +1,32 @@
+{
+  "name": "@modaic/modaic-ts",
+  "version": "0.1.0",
+  "module": "src/index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "simple-git": "^3.27.0",
+    "zod": "^4.2.1"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --declaration --emitDeclarationOnly && bun build ./src/index.ts --outdir ./dist --target node",
+    "test": "bun test"
+  }
+}

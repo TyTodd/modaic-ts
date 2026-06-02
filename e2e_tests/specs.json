@@ -1,0 +1,31 @@
+{
+  "summarize": {
+    "instructions": "Summarize the given text into a concise summary.",
+    "inputs": [
+      { "name": "text", "type": "string", "desc": "The text to summarize" }
+    ],
+    "outputs": [
+      { "name": "summary", "type": "string", "desc": "A concise summary of the text" }
+    ]
+  },
+  "quality_judge": {
+    "instructions": "Judge whether the answer correctly addresses the question.",
+    "inputs": [
+      { "name": "question", "type": "string", "desc": "The user's question" },
+      { "name": "answer", "type": "string", "desc": "The answer to judge" }
+    ],
+    "outputs": [
+      { "name": "verdict", "type": "string", "desc": "correct or incorrect" },
+      { "name": "score", "type": "number", "desc": "Confidence between 0 and 1" }
+    ]
+  },
+  "camel_case": {
+    "instructions": "Map a user question to a final answer.",
+    "inputs": [
+      { "name": "userQuestion", "type": "string", "desc": "The raw user question" }
+    ],
+    "outputs": [
+      { "name": "finalAnswer", "type": "string", "desc": "The final answer" }
+    ]
+  }
+}
