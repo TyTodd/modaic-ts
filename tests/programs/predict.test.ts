@@ -39,6 +39,21 @@ describe("Predict.dump_state", () => {
     });
   });
 
+  test("writes lm state from a model string", () => {
+    const p = new Predict(summarizeSignature(), { model: "gpt-oss-120b" });
+    expect(p.dump_state().lm).toEqual({
+      model: "gpt-oss-120b",
+      model_type: "chat",
+      cache: true,
+      num_retries: 3,
+      finetuning_model: null,
+      launch_kwargs: {},
+      train_kwargs: {},
+      temperature: null,
+      max_tokens: null,
+    });
+  });
+
   test("accepts a string signature like ds.ts", () => {
     const p = new Predict("question -> answer");
     const state = p.dump_state();
@@ -67,7 +82,7 @@ describe("Predict.dump_state", () => {
 
 describe("buildProgramJson via Predict", () => {
   test("appends metadata as the last key", () => {
-    const program = buildProgramJson(summarizeSignature());
+    const program = buildProgramJson(summarizeSignature(), "gpt-oss-120b");
     expect(Object.keys(program)).toEqual([
       "traces",
       "train",

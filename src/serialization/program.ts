@@ -1,5 +1,5 @@
 import type { Signature } from "../signatures/signature";
-import { Predict } from "../programs/predict";
+import { Predict, type LMState } from "../programs/predict";
 
 /**
  * The shape of `program.json` — the stored program state.
@@ -22,7 +22,7 @@ export interface ProgramJson {
   train: unknown[];
   demos: unknown[];
   signature: { instructions?: string; fields: { prefix: string; description: string }[] };
-  lm: null;
+  lm: LMState | null;
   metadata: { dependency_versions: Record<string, string> };
 }
 
@@ -40,15 +40,19 @@ function dependencyVersions(): Record<string, string> {
 }
 
 /**
- * Build the `program.json` object for a Signature.
+ * Build the `program.json` object for a Signature and inference model.
  *
  * Mirrors dspy's `Module.save`: take the (flat) `Predict.dump_state()` and append
- * `metadata`. Secrets are never written (`lm` is always null), matching the Python
- * SDK after `_clean_secrets`. Resulting key order: traces, train, demos, signature,
- * lm, metadata.
+ * `metadata`. `model` is a LiteLLM model string and is written into the `lm` block
+ * (without secrets — the Python SDK's `_clean_secrets` masks secret *values* inside
+ * `lm` but keeps the model, so a null `lm` would leave the judge unrunnable on the
+ * server). Resulting key order: traces, train, demos, signature, lm, metadata.
  */
-export function buildProgramJson(signature: Signature): ProgramJson {
-  const program = new Predict(signature);
+export function buildProgramJson(
+  signature: Signature,
+  model: string,
+): ProgramJson {
+  const program = new Predict(signature, { model });
   return {
     ...program.dump_state(),
     metadata: { dependency_versions: dependencyVersions() },

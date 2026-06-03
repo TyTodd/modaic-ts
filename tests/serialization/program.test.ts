@@ -17,8 +17,22 @@ const EXPECTED_PROGRAM_SUBSET = {
       { prefix: "Summary:", description: "A concise summary of the text" },
     ],
   },
-  lm: null,
+  // Mirrors dspy.LM(model).dump_state(); see real artifacts under
+  // ~/.cache/modaic/.../program.json (e.g. modaic/vercel-email-scoring).
+  lm: {
+    model: "gpt-oss-120b",
+    model_type: "chat",
+    cache: true,
+    num_retries: 3,
+    finetuning_model: null,
+    launch_kwargs: {},
+    train_kwargs: {},
+    temperature: null,
+    max_tokens: null,
+  },
 };
+
+const MODEL = "gpt-oss-120b";
 
 function meaningfulSubset(p: ReturnType<typeof buildProgramJson>) {
   return {
@@ -40,25 +54,26 @@ describe("buildProgramJson", () => {
   });
 
   test("matches the Python program.json for the same signature", () => {
-    const program = buildProgramJson(signature);
+    const program = buildProgramJson(signature, MODEL);
     expect(meaningfulSubset(program)).toEqual(EXPECTED_PROGRAM_SUBSET);
   });
 
-  test("never writes an lm (no secrets) and uses empty defaults", () => {
-    const program = buildProgramJson(signature);
-    expect(program.lm).toBeNull();
+  test("writes the model into lm without secrets, and empty defaults", () => {
+    const program = buildProgramJson(signature, MODEL);
+    expect(program.lm?.model).toBe(MODEL);
+    expect(program.lm).not.toHaveProperty("api_key");
     expect(program.traces).toEqual([]);
     expect(program.train).toEqual([]);
     expect(program.demos).toEqual([]);
   });
 
   test("records dependency_versions metadata as an object", () => {
-    const program = buildProgramJson(signature);
+    const program = buildProgramJson(signature, MODEL);
     expect(typeof program.metadata.dependency_versions).toBe("object");
   });
 
   test("preserves input-then-output field order", () => {
-    const program = buildProgramJson(signature);
+    const program = buildProgramJson(signature, MODEL);
     expect(program.signature.fields.map((f) => f.prefix)).toEqual([
       "Text:",
       "Summary:",

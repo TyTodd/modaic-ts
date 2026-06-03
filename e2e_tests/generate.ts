@@ -22,6 +22,7 @@ type Spec = {
   inputs: FieldSpec[];
   outputs: FieldSpec[];
   repo?: string;
+  model?: string;
 };
 
 function zodFor(type: string): z.ZodType {
@@ -69,7 +70,7 @@ const signature = new Signature({
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(
   path.join(outDir, "program.json"),
-  JSON.stringify(buildProgramJson(signature), null, 2),
+  JSON.stringify(buildProgramJson(signature, spec.model ?? "gpt-oss-120b"), null, 2),
 );
 
 const repo = spec.repo ?? `e2e/${specName}`;

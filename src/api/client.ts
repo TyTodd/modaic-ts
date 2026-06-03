@@ -47,8 +47,16 @@ function bearerHeaders(token: string): Record<string, string> {
 
 async function errorBody(res: Response): Promise<string> {
   try {
-    const data = (await res.json()) as { message?: string };
-    return data.message ?? `HTTP ${res.status}`;
+    // FastAPI surfaces errors under `detail`; some endpoints use `message`.
+    // Read both so server errors aren't collapsed to a bare "HTTP 500".
+    const data = (await res.json()) as { detail?: unknown; message?: string };
+    const detail =
+      typeof data.detail === "string"
+        ? data.detail
+        : data.detail != null
+          ? JSON.stringify(data.detail)
+          : undefined;
+    return detail ?? data.message ?? `HTTP ${res.status}`;
   } catch {
     return `HTTP ${res.status}`;
   }

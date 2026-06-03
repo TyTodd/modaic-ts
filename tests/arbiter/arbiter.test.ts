@@ -1,9 +1,53 @@
 import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import { z } from "zod";
-import { Arbiter } from "../../src/arbiter/arbiter";
+import { Arbiter, ensure_reasoning_field } from "../../src/arbiter/arbiter";
 import { Signature } from "../../src/signatures/signature";
 import { repoNameToTitle } from "../../src/serialization/naming";
 import { AuthenticationError } from "../../src/exceptions";
+
+describe("ensure_reasoning_field", () => {
+  const judge = (output: z.ZodObject<any>) =>
+    new Signature({
+      instructions: "Judge it.",
+      input: z.object({ question: z.string(), answer: z.string() }),
+      output,
+    });
+
+  test("injects a string `reasoning` output before the last output", () => {
+    const sig = ensure_reasoning_field(
+      judge(z.object({ verdict: z.string() })),
+    );
+    expect(Object.keys(sig.output.shape)).toEqual(["reasoning", "verdict"]);
+    // Plain string field (not a dspy.Reasoning $ref).
+    expect(sig.output.shape.reasoning).toBeDefined();
+    expect(sig.dump_state().fields.map((f: any) => f.prefix)).toEqual([
+      "Question:",
+      "Answer:",
+      "Reasoning:",
+      "Verdict:",
+    ]);
+  });
+
+  test("inserts before the last output when there are several", () => {
+    const sig = ensure_reasoning_field(
+      judge(z.object({ a: z.string(), b: z.string(), c: z.string() })),
+    );
+    expect(Object.keys(sig.output.shape)).toEqual([
+      "a",
+      "b",
+      "reasoning",
+      "c",
+    ]);
+  });
+
+  test("is idempotent when reasoning already exists", () => {
+    const original = judge(
+      z.object({ reasoning: z.string(), verdict: z.string() }),
+    );
+    const sig = ensure_reasoning_field(original);
+    expect(Object.keys(sig.output.shape)).toEqual(["reasoning", "verdict"]);
+  });
+});
 
 describe("repoNameToTitle", () => {
   test("derives PascalCase from the repo name segment", () => {
@@ -72,7 +116,7 @@ describe("Arbiter.create wiring", () => {
     }) as unknown as typeof fetch;
     try {
       await expect(
-        Arbiter.create({ repo: "modaic/judge", signature }),
+        Arbiter.create({ repo: "modaic/judge", signature, model: "gpt-oss-120b" }),
       ).rejects.toThrow(/__network_reached__/);
       expect(fetchCalled).toBe(true);
     } finally {

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Signature } from "../signatures/signature";
 import { serializeSignatureToConfig } from "../serialization/config";
 import { buildProgramJson } from "../serialization/program";
@@ -9,6 +10,63 @@ import {
   type ArbiterPrediction,
 } from "../api/client";
 import { syncAndPush, type Commit, type PushFiles } from "../git/push";
+
+/**
+ * The fixed description given to an Arbiter's injected `reasoning` output field.
+ * Matches the Python SDK (`make_arbiter`) verbatim — original wording included —
+ * so judges authored here stay byte-compatible with Python ones.
+ */
+const REASONING_DESC =
+  "Your reasoning for your answer. Inlude any uncertainties about your answer or ambiguity in the task.";
+
+/**
+ * Return a Signature guaranteed to have a `reasoning` output field — the TS analog
+ * of Python `make_arbiter`. Arbiters must expose a plain `reasoning: string` output
+ * because the server reads `prediction.reasoning` on every prediction; without it,
+ * predictions fail server-side.
+ *
+ * Mirrors `make_arbiter`'s `signature.insert(-2, "reasoning", …)`: reasoning is
+ * inserted within the output section just before the last output field (so a
+ * single-output judge gets reasoning first). Idempotent — if a `reasoning` output
+ * already exists, the signature is returned unchanged.
+ */
+export function ensure_reasoning_field(
+  signature: Signature,
+): Signature<z.ZodObject<any>, z.ZodObject<any>> {
+  const outShape = signature.output.shape as Record<string, z.ZodType>;
+  if ("reasoning" in outShape) {
+    return new Signature({
+      instructions: signature.instructions,
+      input: signature.input,
+      output: signature.output,
+    });
+  }
+
+  // A plain string field. Set the description on both `.describe()` and `.meta()`
+  // so it surfaces in program.json (dump_state) and config.json (serializeField).
+  let reasoningField: z.ZodType = z.string().describe(REASONING_DESC);
+  if (typeof (reasoningField as any).meta === "function") {
+    reasoningField = (reasoningField as any).meta({
+      description: REASONING_DESC,
+      desc: REASONING_DESC,
+    });
+  }
+
+  const entries = Object.entries(outShape);
+  const insertIdx = Math.max(0, entries.length - 1);
+  const newShape: Record<string, z.ZodType> = {};
+  entries.forEach(([k, field], i) => {
+    if (i === insertIdx) newShape["reasoning"] = reasoningField;
+    newShape[k] = field;
+  });
+  if (entries.length === 0) newShape["reasoning"] = reasoningField;
+
+  return new Signature({
+    instructions: signature.instructions,
+    input: signature.input,
+    output: z.object(newShape),
+  });
+}
 
 /** Options for constructing an Arbiter handle to an existing repo. */
 export interface ArbiterOptions {
@@ -22,6 +80,12 @@ export interface ArbiterOptions {
 export interface CreateOptions {
   repo: string;
   signature: Signature;
+  /**
+   * The LiteLLM model string the server runs this judge with, e.g.
+   * "gpt-oss-120b" or "openai/gpt-4o". Required — an arbiter with no model is
+   * not runnable: `predict()` would fail server-side.
+   */
+  model: string;
   branch?: string;
   tag?: string;
   access_token?: string;
@@ -35,6 +99,11 @@ export interface CreateOptions {
 export interface UpdateOptions {
   /** Optional new signature; when provided, config.json and program.json are rewritten. */
   signature?: Signature;
+  /**
+   * LiteLLM model string. Required when `signature` is provided, since rewriting
+   * `program.json` needs the model written into its `lm` block.
+   */
+  model?: string;
   metadata?: Record<string, unknown> | null;
   extra_files?: string[] | null;
   commit_message?: string;
@@ -80,11 +149,13 @@ export class Arbiter {
     const token = resolveToken(opts.access_token);
 
     // Build files first so a bad signature fails before we create a repo.
+    // Inject the `reasoning` output field so the judge is a valid Arbiter.
+    const signature = ensure_reasoning_field(opts.signature);
     const config = serializeSignatureToConfig(
-      opts.signature,
+      signature,
       repoNameToTitle(opts.repo),
     );
-    const program = buildProgramJson(opts.signature);
+    const program = buildProgramJson(signature, opts.model);
 
     await createRepo(opts.repo, {
       private: opts.private ?? true,
@@ -116,11 +187,18 @@ export class Arbiter {
 
     const files: PushFiles = {};
     if (opts.signature) {
+      if (!opts.model) {
+        throw new Error(
+          "update() requires `model` when `signature` is provided, so the " +
+            "rewritten program.json records the inference model.",
+        );
+      }
+      const signature = ensure_reasoning_field(opts.signature);
       files.config = serializeSignatureToConfig(
-        opts.signature,
+        signature,
         repoNameToTitle(this.repo),
       );
-      files.program = buildProgramJson(opts.signature);
+      files.program = buildProgramJson(signature, opts.model);
     }
 
     return syncAndPush({
